@@ -422,6 +422,36 @@ async def test_api_model_selection_called():
 
 # ── Config: W2A_HEADLESS env ─────────────────────────────────
 
+@pytest.mark.asyncio
+async def test_api_server_reconnects_disconnected_driver(mock_config):
+    """API server reconnects CDP instead of staying in waiting forever."""
+    from chatgpt_web2api.api_server import APIServer
+
+    class FakeDriver:
+        def __init__(self):
+            self.connected = False
+            self.closed = False
+
+        @property
+        def is_connected(self):
+            return self.connected
+
+        async def close(self):
+            self.closed = True
+
+        async def connect(self):
+            self.connected = True
+
+    driver = FakeDriver()
+    server = APIServer(mock_config, driver)
+
+    result = await server._ensure_driver()
+
+    assert result is driver
+    assert driver.closed is True
+    assert driver.is_connected is True
+
+
 def test_config_headless_env(monkeypatch):
     """W2A_HEADLESS env var is read correctly."""
     from chatgpt_web2api.config import Config

@@ -69,6 +69,7 @@ class APIServer:
         self._config = config
         self._driver = driver
         self._lock = asyncio.Lock()
+        self._connect_lock = asyncio.Lock()
         self._request_count = 0
         # Track last conversation for multi-turn continuity
         self._last_conv_id: Optional[str] = None
@@ -103,7 +104,29 @@ class APIServer:
 
     # ── Handlers ──────────────────────────────────────────────
 
+    async def _ensure_driver(self) -> CDPDriver:
+        """Return a connected CDP driver, reconnecting if Chrome is still alive."""
+        if self._driver.is_connected:
+            return self._driver
+
+        async with self._connect_lock:
+            if self._driver.is_connected:
+                return self._driver
+
+            logger.warning("CDP driver disconnected; reconnecting")
+            try:
+                await self._driver.close()
+            except Exception as exc:
+                logger.debug("Ignoring stale CDP driver close failure: %s", exc)
+            await self._driver.connect()
+            return self._driver
+
     async def _handle_health(self, request: web.Request) -> web.Response:
+        if not self._driver.is_connected:
+            try:
+                await asyncio.wait_for(self._ensure_driver(), timeout=5)
+            except Exception as exc:
+                logger.warning("Health reconnect failed: %s", exc)
         return web.json_response({
             "status": "ok" if self._driver.is_connected else "waiting",
             "cdp_connected": self._driver.is_connected,
@@ -114,7 +137,8 @@ class APIServer:
         if err := self._check_auth(request):
             return err
         try:
-            raw = await self._driver.get_models()
+            driver = await self._ensure_driver()
+            raw = await driver.get_models()
         except Exception:
             raw = []
 
@@ -142,7 +166,8 @@ class APIServer:
         if err := self._check_auth(request):
             return err
         try:
-            projects = await self._driver.get_projects()
+            driver = await self._ensure_driver()
+            projects = await driver.get_projects()
         except Exception as e:
             logger.error("Failed to get projects: %s", e)
             projects = []
@@ -233,9 +258,11 @@ class APIServer:
         # Serialize — one request at a time through the browser
         async with self._lock:
             try:
+                driver = await self._ensure_driver()
+
                 # Select model if specified (non-fatal on failure)
                 if model_slug and model_slug != "auto":
-                    selected = await self._driver.select_model(model_slug)
+                    selected = await driver.select_model(model_slug)
                     if not selected:
                         logger.warning(
                             "Could not select model '%s', proceeding with active model",
@@ -245,9 +272,9 @@ class APIServer:
                 # Decide: continue existing conversation or start fresh?
                 if conversation_id:
                     # Explicit conversation_id from client — navigate to it
-                    await self._driver.navigate_conversation(conversation_id)
+                    await driver.navigate_conversation(conversation_id)
                 elif (self._last_conv_id
-                      and self._driver._current_conv_id == self._last_conv_id
+                      and driver._current_conv_id == self._last_conv_id
                       and project_id == self._last_project_id
                       and not system_parts):
                     # Same session, same project, no system prompt override — continue
@@ -255,7 +282,7 @@ class APIServer:
                     await asyncio.sleep(2)  # Let the page settle
                 else:
                     # Fresh chat
-                    await self._driver.navigate_new_chat(gizmo_id=project_id)
+                    await driver.navigate_new_chat(gizmo_id=project_id)
                     self._last_project_id = project_id
 
                 if stream:
