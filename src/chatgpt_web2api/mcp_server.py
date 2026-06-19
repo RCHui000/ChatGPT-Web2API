@@ -10,7 +10,7 @@ from the `modelcontextprotocol/servers` repository:
   - Resource templates for dynamic URIs
   - Rich descriptions with domain knowledge baked in
   - Pure business logic with thin tool handlers
-  - raise_exceptions=True for proper error propagation
+  - tool errors are reported without closing the transport
 
 Transports:
     stdio  — for Claude Desktop, Cursor, etc. (default)
@@ -458,6 +458,7 @@ LIST_PROJECT_FILES_OUTPUT = {
 _driver: CDPDriver | None = None
 _config: Config | None = None
 _lock: asyncio.Lock | None = None
+_connect_lock: asyncio.Lock | None = None
 
 # Tools that mutate browser state — must hold the lock
 _MUTATING_TOOLS = frozenset({
@@ -475,6 +476,35 @@ _MUTATING_TOOLS = frozenset({
 # ═══════════════════════════════════════════════════════════════
 # Business Logic — pure functions (official pattern from mcp-server-git)
 # ═══════════════════════════════════════════════════════════════
+
+async def _ensure_driver() -> CDPDriver:
+    """Return a connected CDP driver, reconnecting lazily if needed."""
+    global _driver, _connect_lock
+
+    if _config is None:
+        raise RuntimeError("MCP server configuration has not been initialized")
+
+    if _driver is not None and _driver.is_connected:
+        return _driver
+
+    if _connect_lock is None:
+        _connect_lock = asyncio.Lock()
+
+    async with _connect_lock:
+        if _driver is not None and _driver.is_connected:
+            return _driver
+
+        if _driver is not None:
+            try:
+                await _driver.close()
+            except Exception as exc:
+                logger.debug("Ignoring stale CDP driver close failure: %s", exc)
+
+        _driver = CDPDriver(cdp_port=_config.chrome.cdp_port)
+        await _driver.connect()
+        logger.info("Connected to Chrome on CDP port %d", _config.chrome.cdp_port)
+        return _driver
+
 
 async def do_chat_completion(driver: CDPDriver, args: dict, config: Config) -> dict:
     """Execute a chat completion through the CDP driver."""
@@ -1071,27 +1101,24 @@ def create_server() -> Server:
         name: str, arguments: dict
     ) -> tuple[list[mcp_types.TextContent], dict] | list[mcp_types.TextContent] | dict:
         """Route tool calls to business logic functions."""
-        if _driver is None:
-            raise ConnectionError(
-                "Not connected to Chrome. Run 'chatgpt-web2api' first."
-            )
+        driver = await _ensure_driver()
 
         handlers = {
-            ToolName.CHAT_COMPLETION.value: lambda: do_chat_completion(_driver, arguments, _config),
-            ToolName.LIST_MODELS.value: lambda: do_list_models(_driver),
-            ToolName.LIST_PROJECTS.value: lambda: do_list_projects(_driver),
-            ToolName.GET_CONVERSATION.value: lambda: do_get_conversation(_driver, arguments),
-            ToolName.LIST_CONVERSATIONS.value: lambda: do_list_conversations(_driver, arguments),
-            ToolName.DELETE_CONVERSATION.value: lambda: do_delete_conversation(_driver, arguments),
-            ToolName.CREATE_PROJECT.value: lambda: do_create_project(_driver, arguments),
-            ToolName.UPDATE_PROJECT_INSTRUCTIONS.value: lambda: do_update_project_instructions(_driver, arguments),
-            ToolName.ARCHIVE_CONVERSATION.value: lambda: do_archive_conversation(_driver, arguments),
-            ToolName.LIST_MEMORIES.value: lambda: do_list_memories(_driver),
-            ToolName.CREATE_MEMORY.value: lambda: do_create_memory(_driver, arguments),
-            ToolName.DELETE_MEMORY.value: lambda: do_delete_memory(_driver, arguments),
-            ToolName.LIST_GPTS.value: lambda: do_list_gpts(_driver),
-            ToolName.CHAT_WITH_GPT.value: lambda: do_chat_with_gpt(_driver, arguments),
-            ToolName.LIST_PROJECT_FILES.value: lambda: do_list_project_files(_driver, arguments),
+            ToolName.CHAT_COMPLETION.value: lambda: do_chat_completion(driver, arguments, _config),
+            ToolName.LIST_MODELS.value: lambda: do_list_models(driver),
+            ToolName.LIST_PROJECTS.value: lambda: do_list_projects(driver),
+            ToolName.GET_CONVERSATION.value: lambda: do_get_conversation(driver, arguments),
+            ToolName.LIST_CONVERSATIONS.value: lambda: do_list_conversations(driver, arguments),
+            ToolName.DELETE_CONVERSATION.value: lambda: do_delete_conversation(driver, arguments),
+            ToolName.CREATE_PROJECT.value: lambda: do_create_project(driver, arguments),
+            ToolName.UPDATE_PROJECT_INSTRUCTIONS.value: lambda: do_update_project_instructions(driver, arguments),
+            ToolName.ARCHIVE_CONVERSATION.value: lambda: do_archive_conversation(driver, arguments),
+            ToolName.LIST_MEMORIES.value: lambda: do_list_memories(driver),
+            ToolName.CREATE_MEMORY.value: lambda: do_create_memory(driver, arguments),
+            ToolName.DELETE_MEMORY.value: lambda: do_delete_memory(driver, arguments),
+            ToolName.LIST_GPTS.value: lambda: do_list_gpts(driver),
+            ToolName.CHAT_WITH_GPT.value: lambda: do_chat_with_gpt(driver, arguments),
+            ToolName.LIST_PROJECT_FILES.value: lambda: do_list_project_files(driver, arguments),
         }
 
         handler = handlers.get(name)
@@ -1145,24 +1172,24 @@ def create_server() -> Server:
             ),
         ]
 
-        if _driver:
-            try:
-                projects = await _driver.get_projects()
-                for p in projects:
-                    if p.get("id"):
-                        resources.append(
-                            mcp_types.Resource(
-                                uri=f"chatgpt://projects/{p['id']}",
-                                name=p.get("name", "Unknown Project"),
-                                description=(
-                                    f"ChatGPT project: {p.get('name', 'Unknown')} "
-                                    f"({p.get('memory_scope', 'project_v2')} memory)"
-                                ),
-                                mimeType="application/json",
-                            )
+        try:
+            driver = await _ensure_driver()
+            projects = await driver.get_projects()
+            for p in projects:
+                if p.get("id"):
+                    resources.append(
+                        mcp_types.Resource(
+                            uri=f"chatgpt://projects/{p['id']}",
+                            name=p.get("name", "Unknown Project"),
+                            description=(
+                                f"ChatGPT project: {p.get('name', 'Unknown')} "
+                                f"({p.get('memory_scope', 'project_v2')} memory)"
+                            ),
+                            mimeType="application/json",
                         )
-            except Exception as e:
-                logger.warning("Failed to list project resources: %s", e)
+                    )
+        except Exception as e:
+            logger.warning("Failed to list project resources: %s", e)
 
         return resources
 
@@ -1185,19 +1212,18 @@ def create_server() -> Server:
         """Read a specific resource by URI."""
         uri = str(request.params.uri)
 
-        if _driver is None:
-            raise ConnectionError("Not connected to Chrome")
+        driver = await _ensure_driver()
 
         if uri == "chatgpt://models":
-            models = await _driver.get_models()
+            models = await driver.get_models()
             data = [{"id": m.get("slug", ""), "title": m.get("title", "")} for m in models]
             return json.dumps(data, ensure_ascii=False, indent=2)
 
         elif uri == "chatgpt://account":
             return json.dumps(
                 {
-                    "user": _driver._user_name,
-                    "connected": _driver.is_connected,
+                    "user": driver._user_name,
+                    "connected": driver.is_connected,
                 },
                 ensure_ascii=False,
                 indent=2,
@@ -1205,7 +1231,7 @@ def create_server() -> Server:
 
         elif uri.startswith("chatgpt://projects/"):
             project_id = uri.split("/")[-1]
-            projects = await _driver.get_projects()
+            projects = await driver.get_projects()
             for p in projects:
                 if p.get("id") == project_id:
                     return json.dumps(p, ensure_ascii=False, indent=2)
@@ -1271,9 +1297,10 @@ def create_server() -> Server:
 
             tool_args: dict[str, Any] = {"message": question}
 
-            if project and _driver:
+            if project:
                 try:
-                    projects = await _driver.get_projects()
+                    driver = await _ensure_driver()
+                    projects = await driver.get_projects()
                     for p in projects:
                         if project.lower() in (
                             p.get("name", "").lower(),
@@ -1339,20 +1366,20 @@ def create_server() -> Server:
         if isinstance(ref, mcp_types.PromptReference):
             # Autocomplete 'project' argument in ask-chatgpt prompt
             if ref.name == "ask-chatgpt" and argument.name == "project":
-                if _driver:
-                    try:
-                        projects = await _driver.get_projects()
-                        names = [p.get("name", "") for p in projects if p.get("name")]
-                        # Filter by what user has typed
-                        prefix = argument.value.lower()
-                        matches = [n for n in names if prefix in n.lower()]
-                        return mcp_types.Completion(
-                            values=matches[:20],
-                            total=len(matches),
-                            hasMore=len(matches) > 20,
-                        )
-                    except Exception:
-                        pass
+                try:
+                    driver = await _ensure_driver()
+                    projects = await driver.get_projects()
+                    names = [p.get("name", "") for p in projects if p.get("name")]
+                    # Filter by what user has typed
+                    prefix = argument.value.lower()
+                    matches = [n for n in names if prefix in n.lower()]
+                    return mcp_types.Completion(
+                        values=matches[:20],
+                        total=len(matches),
+                        hasMore=len(matches) > 20,
+                    )
+                except Exception:
+                    pass
         return None
 
     return server
@@ -1366,24 +1393,13 @@ def create_server() -> Server:
 async def run_mcp(
     config: Config, transport: str = "stdio", port: int = 8090
 ) -> None:
-    """Connect to Chrome and run the MCP server."""
-    global _driver, _config, _lock
+    """Run the MCP server and connect to Chrome lazily on tool calls."""
+    global _driver, _config, _lock, _connect_lock
 
     _config = config
     _lock = asyncio.Lock()
-
-    _driver = CDPDriver(cdp_port=config.chrome.cdp_port)
-    try:
-        await _driver.connect()
-        logger.info("Connected to Chrome on CDP port %d", config.chrome.cdp_port)
-    except Exception as e:
-        logger.error(
-            "Cannot connect to Chrome on CDP port %d. "
-            "Run 'chatgpt-web2api' first to start Chrome. Error: %s",
-            config.chrome.cdp_port,
-            e,
-        )
-        return
+    _connect_lock = asyncio.Lock()
+    _driver = None
 
     server = create_server()
     init_options = server.create_initialization_options()
@@ -1391,11 +1407,13 @@ async def run_mcp(
     try:
         if transport == "stdio":
             async with stdio_server() as (read, write):
-                await server.run(read, write, init_options, raise_exceptions=True)
+                await server.run(read, write, init_options, raise_exceptions=False)
         elif transport == "sse":
             await _run_sse(server, init_options, config, port)
     finally:
-        await _driver.close()
+        if _driver is not None:
+            await _driver.close()
+            _driver = None
 
 
 async def _run_sse(
@@ -1416,7 +1434,7 @@ async def _run_sse(
             request.scope, request.receive, request._send
         ) as streams:
             await server.run(
-                streams[0], streams[1], init_options, raise_exceptions=True
+                streams[0], streams[1], init_options, raise_exceptions=False
             )
         return Response()
 

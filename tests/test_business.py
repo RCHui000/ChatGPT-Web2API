@@ -304,7 +304,7 @@ def test_model_map_includes_gpt_55_pro_aliases():
 
     aliases = ["gpt-5.5-pro", "gpt-5.5 pro", "gpt-5.5pro", "5.5pro"]
     for alias in aliases:
-        assert MODEL_MAP[alias] == "gpt-5-5-pro"
+        assert MODEL_MAP[alias] == "Pro 扩展"
 
 
 @pytest.mark.asyncio

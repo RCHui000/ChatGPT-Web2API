@@ -1,5 +1,6 @@
 """Unit tests — can run without Chrome/ChatGPT running."""
 
+import asyncio
 import json
 import pytest
 
@@ -126,6 +127,45 @@ def test_server_creates():
     ]
     for handler_type in required_handlers:
         assert handler_type in server.request_handlers, f"Missing handler: {handler_type.__name__}"
+
+
+@pytest.mark.asyncio
+async def test_mcp_driver_connects_lazily_and_reconnects(monkeypatch):
+    """MCP keeps stdio alive and reconnects CDP on demand."""
+    from chatgpt_web2api import mcp_server
+    from chatgpt_web2api.config import Config
+
+    class FakeDriver:
+        def __init__(self, cdp_port):
+            self.port = cdp_port
+            self.connected = False
+            self.closed = False
+
+        async def connect(self):
+            self.connected = True
+
+        async def close(self):
+            self.closed = True
+            self.connected = False
+
+        @property
+        def is_connected(self):
+            return self.connected
+
+    monkeypatch.setattr(mcp_server, "CDPDriver", FakeDriver)
+    monkeypatch.setattr(mcp_server, "_config", Config.load(None))
+    monkeypatch.setattr(mcp_server, "_driver", None)
+    monkeypatch.setattr(mcp_server, "_connect_lock", asyncio.Lock())
+
+    first = await mcp_server._ensure_driver()
+    assert first.is_connected is True
+    assert first.port == 9222
+
+    first.connected = False
+    second = await mcp_server._ensure_driver()
+    assert first.closed is True
+    assert second is not first
+    assert second.is_connected is True
 
 
 def test_stream_chunk_dataclass():
