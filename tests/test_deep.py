@@ -76,7 +76,7 @@ def test_chat_completion_model_field():
     """ChatCompletionInput model field accepts valid values."""
     from chatgpt_web2api.mcp_server import ChatCompletionInput
 
-    for model in ["auto", "gpt-5-5", "gpt-5-mini"]:
+    for model in ["auto", "gpt-5-5", "gpt-5-5-pro", "gpt-5-mini"]:
         inp = ChatCompletionInput(message="hi", model=model)
         assert inp.model == model
 

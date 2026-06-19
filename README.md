@@ -202,9 +202,13 @@ chat_with_gpt(gpt_id="g-hkJGhxxx", message="Analyze this data")
 | Flag | Default | Description |
 |------|---------|-------------|
 | `--port` | 8080 | API server port |
-| `--cdp-port` | 9222 | Chrome debugging port |
+| `--cdp-port` | 9222 | Chrome debugging port, bound to 127.0.0.1 |
 | `--headless` | false | Run Chrome headless (may trigger detection) |
 | `--log-level` | INFO | DEBUG, INFO, WARNING, ERROR |
+
+For trusted home LAN use, you can bind the API server to `0.0.0.0`. Do not
+publish or port-forward the CDP port (`9222`), because it controls the
+logged-in Chrome session.
 
 ### Config File (`config.json`)
 
@@ -239,6 +243,7 @@ Live models from a ChatGPT Plus account (June 2025):
 |------|------|----------|
 | `auto` | Reasoning | General use (default) |
 | `gpt-5-5` | Reasoning, 34K context | Complex analysis |
+| `gpt-5-5-pro` | Pro, if available on account | Highest-capability tasks |
 | `gpt-5-4-thinking` | Extended reasoning | Step-by-step logic |
 | `gpt-5-3-mini` | Fast, 34K context | Simple tasks, speed |
 | `gpt-5-mini` | Fast, 8K context | Quick answers |

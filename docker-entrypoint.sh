@@ -3,6 +3,7 @@ set -e
 
 # If cookies file exists, start Chrome first, inject cookies, then start the proxy
 COOKIE_FILE="/data/cookies/cookies.json"
+CDP_PORT="${W2A_CDP_PORT:-9222}"
 
 if [ -f "$COOKIE_FILE" ]; then
     echo "Found cookies file, injecting..."
@@ -14,7 +15,7 @@ if [ -f "$COOKIE_FILE" ]; then
     # Wait for Chrome CDP to be ready
     echo "Waiting for Chrome CDP..."
     for i in $(seq 1 30); do
-        if curl -s http://127.0.0.1:9222/json/version > /dev/null 2>&1; then
+        if curl -s "http://127.0.0.1:${CDP_PORT}/json/version" > /dev/null 2>&1; then
             break
         fi
         sleep 1

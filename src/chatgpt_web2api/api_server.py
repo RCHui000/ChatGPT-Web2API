@@ -26,6 +26,12 @@ logger = logging.getLogger(__name__)
 # Model mapping: user-facing names → ChatGPT web slugs
 MODEL_MAP = {
     "gpt-5.5": "gpt-5-5",
+    "gpt-5.5-pro": "gpt-5-5-pro",
+    "gpt-5.5 pro": "gpt-5-5-pro",
+    "gpt-5.5pro": "gpt-5-5-pro",
+    "gpt-5-5-pro": "gpt-5-5-pro",
+    "5.5pro": "gpt-5-5-pro",
+    "5.5-pro": "gpt-5-5-pro",
     "gpt-5.5-thinking": "gpt-5-5-thinking",
     "gpt-5.3": "gpt-5-3",
     "gpt-5.2": "gpt-5-2",

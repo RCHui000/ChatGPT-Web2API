@@ -29,6 +29,7 @@ Create `~/.chatgpt-web2api/config.json`:
 {
   "port": 8080,
   "cdp_port": 9222,
+  "_security_note": "Do not publish or port-forward Chrome CDP port 9222.",
   "api_keys": ["sk-my-secret-key"],
   "default_model": "auto"
 }
@@ -85,6 +86,9 @@ docker run -d \
   chatgpt-web2api
 ```
 
+Do not add `-p 9222:9222`. Chrome CDP controls the logged-in browser and must
+stay private to the host/container loopback interface.
+
 ### Step 3: Use it
 
 ```bash
@@ -108,7 +112,7 @@ Cookies expire. When auth fails:
 Run the proxy on a server, let others connect to it.
 
 ```bash
-# On the server (with API key protection)
+# On the server
 chatgpt-web2api --host 0.0.0.0 --port 8080
 
 # Or with config
@@ -122,6 +126,10 @@ cat > config.json << 'EOF'
 EOF
 chatgpt-web2api --config config.json
 ```
+
+Binding the API to `0.0.0.0` is suitable for trusted LAN use when your
+router/firewall does not expose it to the internet. Keep Chrome CDP private:
+do not publish, port-forward, or reverse-proxy port `9222`.
 
 Others connect:
 

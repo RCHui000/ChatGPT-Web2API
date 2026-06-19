@@ -105,6 +105,7 @@ The API maps common OpenAI model names to ChatGPT web equivalents:
 | Requested | Maps to |
 |-----------|---------|
 | `auto` | ChatGPT default (reasoning model) |
+| `gpt-5.5-pro`, `gpt-5.5 pro`, `5.5pro` | `gpt-5-5-pro` |
 | `gpt-4o` | `auto` |
 | `gpt-4` | `gpt-5` |
 | `gpt-3.5-turbo` | `gpt-5-mini` |

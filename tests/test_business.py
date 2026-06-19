@@ -38,6 +38,7 @@ def mock_driver():
     driver.get_models = AsyncMock(return_value=[
         {"slug": "auto", "title": "Auto"},
         {"slug": "gpt-5-5", "title": "GPT-5.5"},
+        {"slug": "gpt-5-5-pro", "title": "GPT-5.5 Pro"},
         {"slug": "gpt-5-mini", "title": "GPT-5 Mini"},
     ])
     driver.get_projects = AsyncMock(return_value=[
@@ -99,9 +100,10 @@ async def test_list_models(mock_driver):
     from chatgpt_web2api.mcp_server import do_list_models
     result = await do_list_models(mock_driver)
     assert "models" in result
-    assert len(result["models"]) == 3
+    assert len(result["models"]) == 4
     assert result["models"][0]["id"] == "auto"
     assert result["models"][1]["id"] == "gpt-5-5"
+    assert result["models"][2]["id"] == "gpt-5-5-pro"
 
 
 @pytest.mark.asyncio
@@ -295,6 +297,14 @@ async def test_chat_completion_with_model(mock_driver, mock_config):
     }, mock_config)
     assert result["model"] == "gpt-5-5"
     mock_driver.select_model.assert_called_once_with("gpt-5-5")
+
+
+def test_model_map_includes_gpt_55_pro_aliases():
+    from chatgpt_web2api.api_server import MODEL_MAP
+
+    aliases = ["gpt-5.5-pro", "gpt-5.5 pro", "gpt-5.5pro", "5.5pro"]
+    for alias in aliases:
+        assert MODEL_MAP[alias] == "gpt-5-5-pro"
 
 
 @pytest.mark.asyncio

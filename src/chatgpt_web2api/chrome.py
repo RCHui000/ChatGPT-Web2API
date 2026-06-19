@@ -105,6 +105,7 @@ class ChromeProcess:
         args = [
             chrome,
             f"--remote-debugging-port={port}",
+            "--remote-debugging-address=127.0.0.1",
             f"--user-data-dir={user_dir}",
             "--no-first-run",
             "--no-default-browser-check",

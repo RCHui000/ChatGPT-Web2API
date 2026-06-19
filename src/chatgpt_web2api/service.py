@@ -145,7 +145,7 @@ class Service:
         print("       ChatGPT-Web2API -- CDP Proxy")
         print("=" * 52)
         print()
-        print(f"  Chrome:   PID running on CDP port {cfg.chrome.cdp_port}")
+        print(f"  Chrome:   PID running with CDP on 127.0.0.1:{cfg.chrome.cdp_port}")
         print(f"  API:      http://{host}:{port}")
         print()
         print("  Endpoints:")

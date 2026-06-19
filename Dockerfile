@@ -21,7 +21,8 @@ ENV W2A_HEADLESS=true
 ENV W2A_USER_DATA_DIR=/data/chrome-profile
 ENV W2A_PORT=8080
 
-EXPOSE 8080 9222
+# Only expose the API server. Chrome DevTools (9222) must stay loopback-only.
+EXPOSE 8080
 
 # Start script handles cookie injection
 COPY docker-entrypoint.sh /docker-entrypoint.sh

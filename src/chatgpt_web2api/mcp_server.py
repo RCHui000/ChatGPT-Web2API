@@ -66,7 +66,8 @@ class ChatCompletionInput(BaseModel):
         default="auto",
         description=(
             "Model slug to use. Common values: auto (default), "
-            "gpt-5-5 (latest, reasoning), gpt-5-mini (fast, simple tasks). "
+            "gpt-5-5 (reasoning), gpt-5-5-pro (Pro, if available), "
+            "gpt-5-mini (fast, simple tasks). "
             "Use list_models to see all available slugs."
         ),
     )
