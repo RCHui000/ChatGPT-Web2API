@@ -9,3 +9,4 @@ build/
 captured_*.json
 sentinel_flow.json
 .chrome-profile/
+web2api-*.log

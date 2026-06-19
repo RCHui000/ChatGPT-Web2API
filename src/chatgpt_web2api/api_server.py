@@ -26,12 +26,27 @@ logger = logging.getLogger(__name__)
 # Model mapping: user-facing names → ChatGPT web slugs
 MODEL_MAP = {
     "gpt-5.5": "gpt-5-5",
-    "gpt-5.5-pro": "gpt-5-5-pro",
-    "gpt-5.5 pro": "gpt-5-5-pro",
-    "gpt-5.5pro": "gpt-5-5-pro",
-    "gpt-5-5-pro": "gpt-5-5-pro",
-    "5.5pro": "gpt-5-5-pro",
-    "5.5-pro": "gpt-5-5-pro",
+    "gpt-5.5-pro": "Pro \u6269\u5c55",
+    "gpt-5.5 pro": "Pro \u6269\u5c55",
+    "gpt-5.5pro": "Pro \u6269\u5c55",
+    "gpt-5-5-pro": "Pro \u6269\u5c55",
+    "5.5pro": "Pro \u6269\u5c55",
+    "5.5-pro": "Pro \u6269\u5c55",
+    "fast": "\u6781\u901f",
+    "balanced": "\u5747\u8861",
+    "advanced": "\u9ad8\u7ea7",
+    "ultra": "\u8d85\u9ad8",
+    "pro-standard": "Pro \u6807\u51c6",
+    "pro-extended": "Pro \u6269\u5c55",
+    "pro-ext": "Pro \u6269\u5c55",
+    "\u6781\u901f": "\u6781\u901f",
+    "\u5747\u8861": "\u5747\u8861",
+    "\u9ad8\u7ea7": "\u9ad8\u7ea7",
+    "\u8d85\u9ad8": "\u8d85\u9ad8",
+    "pro\u6807\u51c6": "Pro \u6807\u51c6",
+    "pro \u6807\u51c6": "Pro \u6807\u51c6",
+    "pro\u6269\u5c55": "Pro \u6269\u5c55",
+    "pro \u6269\u5c55": "Pro \u6269\u5c55",
     "gpt-5.5-thinking": "gpt-5-5-thinking",
     "gpt-5.3": "gpt-5-3",
     "gpt-5.2": "gpt-5-2",
@@ -105,7 +120,11 @@ class APIServer:
 
         models = []
         for m in raw:
+            if not isinstance(m, dict):
+                continue
             slug = m.get("slug", "")
+            if not slug:
+                continue
             models.append({
                 "id": slug,
                 "object": "model",

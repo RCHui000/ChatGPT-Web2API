@@ -529,6 +529,7 @@ async def do_list_models(driver: CDPDriver) -> dict:
         "models": [
             {"id": m.get("slug", ""), "title": m.get("title", "")}
             for m in models
+            if isinstance(m, dict) and m.get("slug")
         ],
     }
 
@@ -1402,36 +1403,38 @@ async def _run_sse(
 ) -> None:
     """Run MCP server with SSE transport for remote/web clients."""
     from mcp.server.sse import SseServerTransport
-    from aiohttp import web
+    from starlette.requests import Request
+    from starlette.responses import Response
+    from starlette.routing import Mount, Route
+    from starlette.applications import Starlette
+    import uvicorn
 
     sse = SseServerTransport("/messages")
 
-    async def handle_sse(request: web.Request):
+    async def handle_sse(request: Request) -> Response:
         async with sse.connect_sse(
             request.scope, request.receive, request._send
         ) as streams:
             await server.run(
                 streams[0], streams[1], init_options, raise_exceptions=True
             )
-        return web.Response()
+        return Response()
 
-    app = web.Application(client_max_size=10 * 1024 * 1024)
-    app.router.add_get("/sse", handle_sse)
-    app.router.add_post("/messages", sse.handle_post_message)
+    app = Starlette(routes=[
+        Route("/sse", endpoint=handle_sse, methods=["GET"]),
+        Mount("/messages", app=sse.handle_post_message),
+    ])
 
-    runner = web.AppRunner(app)
-    await runner.setup()
-    site = web.TCPSite(runner, config.server.host, port)
-    await site.start()
     logger.info("MCP SSE server on http://%s:%d/sse", config.server.host, port)
 
-    try:
-        while True:
-            await asyncio.sleep(3600)
-    except asyncio.CancelledError:
-        pass
-    finally:
-        await runner.cleanup()
+    uvicorn_config = uvicorn.Config(
+        app,
+        host=config.server.host,
+        port=port,
+        log_level=config.log.level.lower(),
+    )
+    uvicorn_server = uvicorn.Server(uvicorn_config)
+    await uvicorn_server.serve()
 
 
 # ═══════════════════════════════════════════════════════════════

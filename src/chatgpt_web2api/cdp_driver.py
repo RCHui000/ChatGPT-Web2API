@@ -122,8 +122,8 @@ class CDPDriver:
         all string-concatenation injection vectors.  The template can
         reference ``__D.keyName`` for any key in *data*.
         """
-        prefix = f"const __D = {json.dumps(data)};"
-        return await self._js(prefix + expr_template, timeout=timeout)
+        expr = f"(() => {{ const __D = {json.dumps(data)}; return {expr_template}; }})()"
+        return await self._js(expr, timeout=timeout)
 
     # ── Model Selection ───────────────────────────────────────
 
@@ -140,20 +140,30 @@ class CDPDriver:
         if slug in ("auto", None, ""):
             return True  # auto is the default, no action needed
 
+        aliases = self._model_aliases(slug)
+
         # Track the current model
         self._current_model = slug
 
         # Click the model picker button
-        picker_clicked = await self._js(
+        picker_clicked = await self._js_with_data(
             "(function() {"
             "  var btn = document.querySelector('#model-selector-btn') "
+            "    || document.querySelector('button.__composer-pill') "
             "    || document.querySelector('button[aria-label*=\"Model\"]') "
             "    || document.querySelector('[data-testid*=\"model\"]') "
-            "    || document.querySelector('button[class*=\"model\"]');"
+            "    || document.querySelector('button[class*=\"model\"]') "
+            "    || Array.from(document.querySelectorAll('button')).find(function(b) {"
+            "      var t = (b.innerText || b.textContent || '').trim();"
+            "      return __D.aliases.some(function(a) { return t.indexOf(a) !== -1; });"
+            "    });"
             "  if (!btn) return 'no picker';"
-            "  btn.click();"
+            "  ['pointerdown','mousedown','pointerup','mouseup','click'].forEach(function(t) {"
+            "    btn.dispatchEvent(new MouseEvent(t, {bubbles:true, cancelable:true, view:window}));"
+            "  });"
             "  return 'clicked';"
-            "})()"
+            "})()",
+            {"aliases": aliases},
         )
         if picker_clicked != "clicked":
             logger.warning("Model picker not found: %s — proceeding with active model", picker_clicked)
@@ -166,13 +176,6 @@ class CDPDriver:
         # The dropdown renders model items as buttons or list items with the slug
         result = await self._js_with_data(
             "(function() {"
-            "  var items = document.querySelectorAll("
-            "    'button[data-testid*=\"model\"], "
-            "    '[class*=\"model-item\"], "
-            "    '[class*=\"modelOption\"], "
-            "    'li[class*=\"model\"], "
-            "    'div[class*=\"model\"] button'"
-            "  );"
             "  function norm(s) {"
             "    return (s || '').toLowerCase()"
             "      .replace(/gpt\\s*[- ]?\\s*/g, 'gpt-')"
@@ -182,31 +185,29 @@ class CDPDriver:
             "      .replace(/^-|-$/g, '');"
             "  }"
             "  var slug = norm(__D.slug);"
+            "  var aliases = (__D.aliases || []).map(function(a) { return String(a).toLowerCase(); });"
+            "  var normAliases = aliases.map(norm);"
             "  var display = slug.replace(/^gpt-/, 'gpt ');"
+            "  var items = Array.from(document.querySelectorAll('[role=\"menuitemradio\"], [role=\"menuitem\"], [role=\"option\"], button'));"
             "  for (var i = 0; i < items.length; i++) {"
             "    var el = items[i];"
-            "    var text = (el.textContent || '').toLowerCase();"
+            "    var text = (el.innerText || el.textContent || '').trim().toLowerCase();"
             "    var dataSlug = (el.getAttribute('data-slug') || '').toLowerCase();"
             "    var textNorm = norm(text);"
             "    var dataNorm = norm(dataSlug);"
-            "    if (dataNorm === slug || textNorm === slug || textNorm.indexOf(slug) !== -1 || text.indexOf(display) !== -1) {"
-            "      el.click();"
+            "    var matched = dataNorm === slug || textNorm === slug || textNorm.indexOf(slug) !== -1 || text.indexOf(display) !== -1;"
+            "    matched = matched || aliases.some(function(a) { return text === a || text.indexOf(a) !== -1 || dataSlug === a; });"
+            "    matched = matched || normAliases.some(function(a) { return textNorm === a || textNorm.indexOf(a) !== -1 || dataNorm === a; });"
+            "    if (matched && text) {"
+            "      ['pointerdown','mousedown','pointerup','mouseup','click'].forEach(function(t) {"
+            "        el.dispatchEvent(new MouseEvent(t, {bubbles:true, cancelable:true, view:window}));"
+            "      });"
             "      return 'selected';"
-            "    }"
-            "  }"
-            "  // Fallback: try broader search in the dropdown"
-            "  var allBtns = document.querySelectorAll('button, [role=\"menuitem\"]');"
-            "  for (var j = 0; j < allBtns.length; j++) {"
-            "    var t = (allBtns[j].textContent || '').toLowerCase();"
-            "    var tNorm = norm(t);"
-            "    if (tNorm === slug || tNorm.indexOf(slug) !== -1 || t.indexOf(display) !== -1) {"
-            "      allBtns[j].click();"
-            "      return 'selected-fallback';"
             "    }"
             "  }"
             "  return 'not-found';"
             "})()",
-            {"slug": slug.lower()},
+            {"slug": slug.lower(), "aliases": aliases},
         )
 
         if result in ("selected", "selected-fallback"):
@@ -218,6 +219,34 @@ class CDPDriver:
         return False
 
     # ── Navigation ────────────────────────────────────────────
+
+    def _model_aliases(self, slug: str) -> list[str]:
+        """Return picker labels and aliases for current ChatGPT Web model tiers."""
+        raw = str(slug or "").strip()
+        compact = raw.lower().replace(" ", "").replace("-", "").replace("_", "")
+        aliases = {raw, raw.lower()}
+        tier_aliases = {
+            "fast": ["\u6781\u901f"],
+            "\u6781\u901f": ["\u6781\u901f", "fast"],
+            "balanced": ["\u5747\u8861"],
+            "\u5747\u8861": ["\u5747\u8861", "balanced"],
+            "advanced": ["\u9ad8\u7ea7"],
+            "\u9ad8\u7ea7": ["\u9ad8\u7ea7", "advanced"],
+            "ultra": ["\u8d85\u9ad8"],
+            "\u8d85\u9ad8": ["\u8d85\u9ad8", "ultra"],
+            "prostandard": ["Pro \u6807\u51c6", "pro standard", "pro-standard"],
+            "pro\u6807\u51c6": ["Pro \u6807\u51c6", "pro standard", "pro-standard"],
+            "proextended": ["Pro \u6269\u5c55", "pro extended", "pro-extended", "gpt-5.5 pro"],
+            "proext": ["Pro \u6269\u5c55", "pro extended", "pro-extended", "pro-ext"],
+            "pro\u6269\u5c55": ["Pro \u6269\u5c55", "pro extended", "pro-extended", "gpt-5.5 pro"],
+            "gpt5.5pro": ["Pro \u6269\u5c55", "GPT-5.5"],
+            "gpt55pro": ["Pro \u6269\u5c55", "GPT-5.5"],
+            "gpt55": ["GPT-5.5", "gpt-5-5"],
+        }
+        for value in tier_aliases.get(compact, []):
+            aliases.add(value)
+            aliases.add(value.lower())
+        return [a for a in aliases if a]
 
     async def navigate_new_chat(self, gizmo_id: str = None) -> None:
         """Navigate to a fresh chat. Optionally scope to a project gizmo."""
@@ -468,15 +497,43 @@ class CDPDriver:
     # ── API helpers ───────────────────────────────────────────
 
     async def get_models(self) -> list[dict]:
-        return await self._js_with_data(
+        raw = await self._js_with_data(
             "(async () => {"
-            "  var r = await fetch('/backend-api/models?iim=false&is_gizmo=false', {"
-            "    headers: {'Authorization': 'Bearer ' + __D.token}"
-            "  });"
-            "  return await r.text();"
+            "  try {"
+            "    var r = await fetch('/backend-api/models?iim=false&is_gizmo=false', {"
+            "      headers: {'Authorization': 'Bearer ' + __D.token}"
+            "    });"
+            "    return await r.text();"
+            "  } catch(e) { return ''; }"
             "})()",
             {"token": self._access_token},
         )
+        try:
+            data = json.loads(raw) if isinstance(raw, str) and raw else raw
+        except json.JSONDecodeError:
+            return []
+
+        if isinstance(data, list):
+            return [m for m in data if isinstance(m, dict)]
+        if not isinstance(data, dict):
+            return []
+
+        for key in ("models", "items", "data"):
+            value = data.get(key)
+            if isinstance(value, list):
+                return [m for m in value if isinstance(m, dict)]
+
+        if isinstance(data.get("categories"), list):
+            models: list[dict] = []
+            for category in data["categories"]:
+                if not isinstance(category, dict):
+                    continue
+                for model in category.get("models", []) or []:
+                    if isinstance(model, dict):
+                        models.append(model)
+            return models
+
+        return []
 
     async def get_projects(self) -> list[dict]:
         raw = await self._js_with_data(
