@@ -80,10 +80,15 @@ class CDPDriver:
             "(async () => {"
             "  const r = await fetch('/api/auth/session', {credentials:'include'});"
             "  const d = await r.json();"
-            "  return JSON.stringify({token: d.accessToken || '', user: d.user?.name || ''});"
+            "  return {token: d.accessToken || '', user: d.user?.name || ''};"
             "})()"
         )
-        data = json.loads(raw)
+        if isinstance(raw, dict):
+            data = raw
+        elif isinstance(raw, str) and raw:
+            data = json.loads(raw)
+        else:
+            data = {}
         self._access_token = data.get("token", "")
         self._user_name = data.get("user", "")
         if not self._access_token:
