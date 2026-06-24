@@ -4,12 +4,19 @@
 
 本项目不逆向 token、不手动处理 Turnstile/PoW，也不直接模拟 ChatGPT 后端完整协议。它启动一个真实 Chrome 浏览器，通过 Chrome DevTools Protocol（CDP）控制 `chatgpt.com` 页面：输入消息、点击发送、读取回复，再对外提供 HTTP API 和 MCP 工具。
 
+## 项目定位
+
+本仓库的主要使用目标，是把 ChatGPT Web 中的 GPT-5.5 Pro / Pro 扩展模式接入本机环境，并架设成 MCP 服务器，供 Codex 在进行 coding plan、方案设计、架构评审和复杂实现拆解时调用。
+
+换句话说，它更像是 Codex 的“教师模型”或“外部评审模型”通道：Codex 负责读代码、改代码和执行本地验证；GPT-5.5 Pro 通过 MCP 提供更强的规划、推理和交叉审查能力。这样可以在不直接使用 OpenAI API key 的情况下，复用已登录 ChatGPT 网页端的模型能力。
+
 ## 适用场景
 
 - 你有 ChatGPT Plus/Pro 账号，希望在本机或可信服务器上通过程序调用 ChatGPT Web。
 - 你想让 Codex、Claude Desktop、Cursor 等 MCP 客户端复用已登录的 ChatGPT 网页会话。
 - 你希望使用 OpenAI Python SDK 兼容格式调用本地代理。
 - 你需要访问 ChatGPT Projects、Custom GPTs、会话列表、记忆等网页端能力。
+- 你希望把 GPT-5.5 Pro / Pro 扩展模式作为 Codex coding plan 的教师模型或评审模型。
 
 ## 工作原理
 
@@ -120,6 +127,15 @@ Compose 默认只暴露 API 端口 `8080`。不要暴露 Chrome CDP 端口 `9222
 
 MCP 服务会复用同一个 Chrome 登录会话，提供聊天、模型列表、项目、会话、记忆和 Custom GPT 等工具。
 
+在 Codex 场景中，推荐把该 MCP 作为规划和评审辅助工具使用。例如：
+
+- 让 Codex 先阅读本地代码并整理上下文。
+- 通过 `chat_completion` 调用 GPT-5.5 Pro / Pro 扩展模式讨论技术方案。
+- 把外部模型给出的建议转化为可执行 task list。
+- 再由 Codex 在本地完成代码修改、测试和提交。
+
+常见模型参数可以使用 `gpt-5-5-pro` 或项目中配置的 Pro 扩展别名；实际可用模型以 `list_models` 返回为准。
+
 ## 常用配置
 
 环境变量：
@@ -162,4 +178,3 @@ W2A_CHROME_EXTRA_ARGS="--no-sandbox --disable-dev-shm-usage"
 - 部署指南：[docs/deployment.md](docs/deployment.md)
 - API 参考：[docs/api-reference.md](docs/api-reference.md)
 - 架构说明：[docs/architecture.md](docs/architecture.md)
-
