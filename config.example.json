@@ -6,6 +6,7 @@
   "chrome_path": "auto",
   "user_data_dir": "~/.chatgpt-web2api/chrome-profile",
   "headless": false,
+  "extra_args": [],
   "default_model": "auto",
   "default_project_id": null,
   "api_keys": [],

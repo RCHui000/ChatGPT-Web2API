@@ -5,6 +5,7 @@ from __future__ import annotations
 import json
 import os
 import platform
+import shlex
 import shutil
 from dataclasses import dataclass, field
 from pathlib import Path
@@ -110,6 +111,9 @@ class Config:
         c = data.get("headless")
         if c is not None:
             self.chrome.headless = bool(c)
+        c = data.get("extra_args")
+        if c:
+            self.chrome.extra_args = list(c)
         c = data.get("port")
         if c is not None:
             self.server.port = int(c)
@@ -153,6 +157,8 @@ class Config:
             self.chatgpt.default_model = v
         if v := _env("W2A_HEADLESS"):
             self.chrome.headless = v.lower() in ("true", "1", "yes")
+        if v := _env("W2A_CHROME_EXTRA_ARGS"):
+            self.chrome.extra_args = shlex.split(v)
         if v := _env("W2A_LOG_LEVEL"):
             self.log.level = v
 
@@ -162,6 +168,7 @@ class Config:
             "user_data_dir": self.chrome.user_data_dir,
             "cdp_port": self.chrome.cdp_port,
             "headless": self.chrome.headless,
+            "extra_args": self.chrome.extra_args,
             "port": self.server.port,
             "host": self.server.host,
             "api_keys": self.server.api_keys,

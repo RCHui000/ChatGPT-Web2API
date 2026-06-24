@@ -43,7 +43,7 @@ W2A_PORT=9090 W2A_API_KEYS=sk-key1,sk-key2 chatgpt-web2api
 
 ---
 
-## Option 2: Docker (For servers / headless)
+## Option 2: Docker / Compose (For servers / headless)
 
 Requires exporting cookies from an already-logged-in browser session.
 
@@ -71,7 +71,40 @@ The file should look like:
 ]
 ```
 
-### Step 2: Run with Docker
+### Step 2A: Run with Docker Compose
+
+Create a local cookies directory and place the exported cookie file at
+`cookies/cookies.json`:
+
+```bash
+mkdir -p cookies
+cp /path/to/cookies.json cookies/cookies.json
+```
+
+Start the service:
+
+```bash
+docker compose up -d --build
+```
+
+Check health:
+
+```bash
+docker compose ps
+curl http://localhost:8080/health
+```
+
+The Compose file:
+
+- publishes only the API port: `8080`
+- keeps Chrome CDP port `9222` private inside the container
+- persists the Chrome profile in the `chatgpt_chrome_profile` Docker volume
+- mounts `./cookies` read-only for cookie injection
+
+Optional API keys can be enabled by uncommenting `W2A_API_KEYS` in
+`docker-compose.yml`.
+
+### Step 2B: Run with plain Docker
 
 ```bash
 # Build
@@ -83,6 +116,9 @@ docker run -d \
   -p 8080:8080 \
   -v ./cookies.json:/data/cookies/cookies.json:ro \
   -v chatgpt-profile:/data/chrome-profile \
+  -e W2A_HOST=0.0.0.0 \
+  -e W2A_HEADLESS=true \
+  -e 'W2A_CHROME_EXTRA_ARGS=--no-sandbox --disable-dev-shm-usage' \
   chatgpt-web2api
 ```
 
@@ -103,7 +139,9 @@ Cookies expire. When auth fails:
 
 1. Re-export fresh cookies from your browser
 2. Replace `cookies.json`
-3. Restart the container: `docker restart chatgpt-proxy`
+3. Restart the container:
+   - Compose: `docker compose restart`
+   - Plain Docker: `docker restart chatgpt-proxy`
 
 ---
 

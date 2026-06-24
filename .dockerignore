@@ -1,0 +1,14 @@
+.git
+.github
+.pytest_cache
+__pycache__
+*.py[cod]
+*.egg-info
+build
+dist
+.env
+.chrome-profile
+cookies
+*.log
+web2api-*.log
+sentinel_flow.json

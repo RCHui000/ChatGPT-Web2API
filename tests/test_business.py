@@ -473,6 +473,24 @@ def test_config_headless_env(monkeypatch):
     assert config.chrome.headless is False  # default
 
 
+def test_config_chrome_extra_args_env(monkeypatch):
+    """W2A_CHROME_EXTRA_ARGS is parsed into Chrome flags."""
+    from chatgpt_web2api.config import Config
+
+    monkeypatch.setenv(
+        "W2A_CHROME_EXTRA_ARGS",
+        "--no-sandbox --disable-dev-shm-usage '--user-agent=test agent'",
+    )
+
+    config = Config.load(None)
+
+    assert config.chrome.extra_args == [
+        "--no-sandbox",
+        "--disable-dev-shm-usage",
+        "--user-agent=test agent",
+    ]
+
+
 # ── CDP Driver: _js_with_data safety ─────────────────────────
 
 def test_js_with_data_escapes_properly():

@@ -5,6 +5,8 @@
 
 **Turn ChatGPT into an API. No API key. No token extraction. No sentinel solving.**
 
+[中文说明](README.zh-CN.md)
+
 One command starts a Chrome browser, logs into ChatGPT, and exposes an OpenAI-compatible API + MCP server.
 
 [![CI](https://github.com/Elephant-Rock-Lab/ChatGPT-Web2API/actions/workflows/ci.yml/badge.svg)](https://github.com/Elephant-Rock-Lab/ChatGPT-Web2API/actions/workflows/ci.yml)
@@ -82,6 +84,22 @@ curl http://localhost:8080/v1/chat/completions \
 ```
 
 That's it. **One install, one command, one endpoint.**
+
+### Docker Compose
+
+For headless server deployment, export cookies from an already logged-in
+`chatgpt.com` browser session and save them as `cookies/cookies.json`:
+
+```bash
+mkdir -p cookies
+# copy exported ChatGPT cookies to cookies/cookies.json
+docker compose up -d --build
+curl http://localhost:8080/health
+```
+
+Only port `8080` is published. Do not publish Chrome CDP port `9222`; it
+controls the logged-in browser session. See [Deployment Guide](docs/deployment.md)
+for cookie export and refresh details.
 
 ## What You Get
 
